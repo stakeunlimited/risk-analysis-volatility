@@ -4,6 +4,7 @@ from datetime import datetime
 import logging
 import psycopg2
 from psycopg2.extras import DictCursor
+from constants import API_KEY, DB_URL
 
 # Configure logging
 logging.basicConfig(
@@ -95,8 +96,5 @@ class CryptoScraper:
             logging.info("Database connection closed")
 
 if __name__ == "__main__":
-    API_KEY = ""
-    DB_URL = ""
-    
     scraper = CryptoScraper(API_KEY, DB_URL)
     scraper.run()
