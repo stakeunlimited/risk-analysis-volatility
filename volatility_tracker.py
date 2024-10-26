@@ -36,41 +36,11 @@ class VolatilityTracker:
     def __init__(self):
         self.conn = None
         self.connect_db()
-        # self.setup_database()
 
     def connect_db(self):
         """Establish database connection"""
         if self.conn is None or self.conn.closed:
             self.conn = psycopg2.connect(DB_URL)
-
-    def setup_database(self):
-        """Create VolatilityData table if it doesn't exist"""
-        with self.conn.cursor() as cur:
-            # First drop the existing index if it exists
-            cur.execute("""
-                DROP INDEX IF EXISTS idx_volatility_asset_date;
-            """)
-            
-            # Recreate the table with proper constraints
-            cur.execute("""
-                DROP TABLE IF EXISTS \"VolatilityData\";
-                CREATE TABLE \"VolatilityData\" (
-                    \"id\" SERIAL PRIMARY KEY,
-                    \"assetId\" UUID NOT NULL,
-                    \"symbol\" VARCHAR(10) NOT NULL,
-                    \"date\" DATE NOT NULL,
-                    \"open\" DECIMAL NOT NULL,
-                    \"high\" DECIMAL NOT NULL,
-                    \"low\" DECIMAL NOT NULL,
-                    \"close\" DECIMAL NOT NULL,
-                    \"volatility\" DECIMAL NOT NULL,
-                    \"kurtosis\" DECIMAL,
-                    CONSTRAINT unique_asset_date UNIQUE(\"assetId\", \"date\")
-                );
-                CREATE INDEX idx_volatility_asset_date 
-                ON \"VolatilityData\"(\"assetId\", \"date\");
-            """)
-            self.conn.commit()
 
     def has_today_data(self, asset_id):
         """Check if we already have today's data for the given asset"""
