@@ -30,6 +30,7 @@ COIN_ID_MAP = {
     'FDUSD': 'first-digital-usd',
     'USDC.e': 'bridged-usdc-polygon-pos-bridge',
     'USDe': 'ethena-usde',
+    'USDJ': 'just-stablecoin',
 }
 
 class VolatilityTracker:
@@ -229,7 +230,7 @@ class VolatilityTracker:
                     INSERT INTO \"VolatilityData\" 
                     (\"assetId\", \"symbol\", \"date\", \"open\", \"high\", \"low\", \"close\", \"volatility\", \"kurtosis\")
                     VALUES %s
-                    ON CONFLICT ON CONSTRAINT unique_asset_date DO NOTHING
+                    ON CONFLICT ON CONSTRAINT \"VolatilityData_pkey\" DO NOTHING
                     """,
                     data_to_insert
                 )
