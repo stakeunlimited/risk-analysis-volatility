@@ -1,7 +1,7 @@
 ## Prerequisites
 
-1. **CoinGecko API Key**: Obtain an API key from [CoinGecko](https://www.coingecko.com/en/api) and add it to `constants.py`.
-2. **PostgreSQL Credentials**: Add your PostgreSQL login details in `constants.py` for database connectivity.
+1. **CoinGecko API Key**: Obtain an API key from [CoinGecko](https://www.coingecko.com/en/api) and add it to `constants.py` as `COINGECKO_API_KEY`.
+2. **PostgreSQL Credentials**: Add your PostgreSQL login details in `constants.py` for database connectivity as `DB_URL`.
 
 ## Installation
 
