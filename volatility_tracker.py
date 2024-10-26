@@ -195,6 +195,117 @@ class VolatilityTracker:
             """, (start_date, end_date, asset_id, start_date, end_date))
             return [row[0] for row in cur.fetchall()]
 
+    def calculate_daily_mse(self, row):
+        """Calculate MSE for a single day using average of OHLC as the actual price"""
+        # Calculate the actual price as average of OHLC
+        actual_price = (row['open'] + row['high'] + row['low'] + row['close']) / 4
+        predicted_price = 1
+        return (actual_price - predicted_price) ** 2
+
+    def update_missing_mse(self):
+        """Update MSE for records where it's missing"""
+        self.connect_db()
+        try:
+            # First, get all unique asset IDs and symbols where MSE is NULL
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    SELECT DISTINCT \"assetId\", symbol 
+                    FROM \"VolatilityData\"
+                    WHERE mse IS NULL
+                """)
+                assets_to_update = cur.fetchall()
+
+            for asset_id, symbol in assets_to_update:
+                # Get all records for this asset
+                with self.conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT \"date\", open, high, low, close 
+                        FROM \"VolatilityData\"
+                        WHERE \"assetId\" = %s
+                        AND mse IS NULL
+                        ORDER BY \"date\"
+                    """, (asset_id,))
+                    records = cur.fetchall()
+
+                if records:
+                    df = pd.DataFrame(records, columns=['date', 'open', 'high', 'low', 'close'])
+                    
+                    # Calculate MSE for each day
+                    df['mse'] = df.apply(self.calculate_daily_mse, axis=1)
+
+                    # Update records with calculated MSE values
+                    data_to_update = [(float(row['mse']), asset_id, row['date']) for _, row in df.iterrows()]
+                    
+                    with self.conn.cursor() as cur:
+                        execute_values(
+                            cur,
+                            """
+                            UPDATE \"VolatilityData\" AS v SET
+                                mse = d.mse
+                            FROM (VALUES %s) AS d (mse, asset_id, date)
+                            WHERE v.\"assetId\" = d.asset_id::uuid
+                            AND v.\"date\" = d.date::date
+                            """,
+                            data_to_update,
+                            template='(%(0)s, %(1)s, %(2)s)'
+                        )
+
+                    self.conn.commit()
+                    logging.info(f"Updated MSE for {symbol} (asset_id: {asset_id})")
+
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Error updating MSE values: {str(e)}")
+            raise
+    
+    def force_update_all_mse(self):
+        """Force update MSE for all records regardless of current value"""
+        self.connect_db()
+        try:
+            # First, get all unique asset IDs and symbols
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    SELECT DISTINCT \"assetId\", symbol 
+                    FROM \"VolatilityData\"
+                """)
+                assets_to_update = cur.fetchall()
+
+            for asset_id, symbol in assets_to_update:
+                # Get all records for this asset
+                with self.conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT \"date\", open, high, low, close 
+                        FROM \"VolatilityData\"
+                        WHERE \"assetId\" = %s
+                        ORDER BY \"date\"
+                    """, (asset_id,))
+                    records = cur.fetchall()
+
+                if records:
+                    # Convert to DataFrame
+                    df = pd.DataFrame(records, columns=['date', 'open', 'high', 'low', 'close'])
+                    
+                    # Calculate MSE for each day
+                    df['mse'] = df.apply(self.calculate_daily_mse, axis=1)
+
+                    # Update records with calculated MSE values using individual updates
+                    for _, row in df.iterrows():
+                        with self.conn.cursor() as cur:
+                            cur.execute("""
+                                UPDATE \"VolatilityData\"
+                                SET mse = %s
+                                WHERE \"assetId\" = %s
+                                AND \"date\" = %s
+                            """, (float(row['mse']), asset_id, row['date']))
+
+                    self.conn.commit()
+                    logging.info(f"Force updated MSE for {symbol} (asset_id: {asset_id})")
+
+        except Exception as e:
+            self.conn.rollback()
+            logging.error(f"Error force updating MSE values: {str(e)}")
+            raise
+
     def store_volatility_data(self, asset_id, symbol, df):
         """Store volatility data in the database"""
         if df is None or df.empty:
@@ -203,9 +314,10 @@ class VolatilityTracker:
         self.connect_db()
         df = df.copy()
         
-        # Calculate volatility and kurtosis
+        # Calculate volatility, kurtosis, and MSE
         df['volatility'] = self.calculate_volatility(df)
         kurtosis = df['volatility'].kurtosis()
+        mse = self.calculate_mse(df)
         
         # Prepare data for insertion
         data_to_insert = []
@@ -219,7 +331,8 @@ class VolatilityTracker:
                 float(row['low']),
                 float(row['close']),
                 float(row['volatility']),
-                float(kurtosis)
+                float(kurtosis),
+                float(mse),
             ))
 
         try:
@@ -228,7 +341,7 @@ class VolatilityTracker:
                     cur,
                     """
                     INSERT INTO \"VolatilityData\" 
-                    (\"assetId\", \"symbol\", \"date\", \"open\", \"high\", \"low\", \"close\", \"volatility\", \"kurtosis\")
+                    (\"assetId\", \"symbol\", \"date\", \"open\", \"high\", \"low\", \"close\", \"volatility\", \"kurtosis\", \"mse\")
                     VALUES %s
                     ON CONFLICT ON CONSTRAINT \"VolatilityData_pkey\" DO NOTHING
                     """,
@@ -253,6 +366,8 @@ class VolatilityTracker:
             logging.info("Starting volatility tracking run")
             self.connect_db()
             
+            self.update_missing_mse()
+
             assets = self.fetch_assets()
             random.shuffle(assets)
             
@@ -282,6 +397,12 @@ def run_tracker():
 
 if __name__ == "__main__":
     # Run once immediately
+    
+    # If MSE values are broken, uncomment and run this:
+    # tracker = VolatilityTracker()
+    # tracker.force_update_all_mse()
+    # assert False
+
     logging.info("Running initial volatility tracking...")
     run_tracker()
     
