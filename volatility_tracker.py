@@ -317,7 +317,7 @@ class VolatilityTracker:
         # Calculate volatility, kurtosis, and MSE
         df['volatility'] = self.calculate_volatility(df)
         kurtosis = df['volatility'].kurtosis()
-        mse = self.calculate_mse(df)
+        df['mse'] = df.apply(self.calculate_daily_mse, axis=1)
         
         # Prepare data for insertion
         data_to_insert = []
@@ -332,7 +332,7 @@ class VolatilityTracker:
                 float(row['close']),
                 float(row['volatility']),
                 float(kurtosis),
-                float(mse),
+                float(row['mse']),
             ))
 
         try:
