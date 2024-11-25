@@ -1,3 +1,5 @@
+> Submodule of [d-analysis](https://github.com/stakeunlimited/d-analysis) | [Live Site](https://danalysis.vercel.app/)
+
 # Stablecoin Volatility Tracker
 
 A comprehensive data collection and analysis system for monitoring stablecoin volatility in DeFi protocols. This project fetches real-time and historical price data from various sources, calculates volatility metrics, and stores them in a PostgreSQL database for dashboard visualization.
